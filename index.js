@@ -1,12 +1,17 @@
+require ('dotenv').config()
+
 const express = require('express')
 const cors = require('cors')
 const app = express()
-const morgan = require('morgan')
- 
+const Contact = require('./models/contacto.js')
+
 app.use(express.json()) //obtener datos que envia el usuario
-app.use(cors())
+app.use(cors()) //para poder pedir o enviar datos desde otros servidores diferentes al alojados
 app.use(express.static('dist'))
- 
+
+
+//Mildware-------------------------------------------------------------------------
+const morgan = require('morgan')
 morgan.token('body', (req) => JSON.stringify(req.body))
 app.use((req, res, next) => {
   const format = req.method === 'POST'
@@ -14,22 +19,23 @@ app.use((req, res, next) => {
     : 'tiny';
   morgan(format)(req, res, next);
 })
- 
+//-----------------------------------------------------------------------------------
+
 let persons = [
         {
-            id: 1,
-            name: "Adolfo",
-            number: 993167474
+        id: 1,
+        name: "Jose Alberto",
+        number: 9931798565
         },
         {
             id: 2,
-            name: "Jose",
-            number: 99325764
+            name: "Adolfo",
+            number: 9933225858
         },
         {
             id: 3,
-            name: "Lezama",
-            number: 99336467474
+            name: "Carlos",
+            number: 9931307185
         }
     ]
  
@@ -37,85 +43,75 @@ let persons = [
         response.send('<h1>API REST FROM AGENDA</h1>')
     })
     app.get('/api/persons',(request,response) => {
-        response.json(persons)
+        Contact.find({}).then(persons =>{
+            response.json(persons)
+            })
     })
     app.get('/api/persons/:id',(request,response) => {
-        const id = Number(request.params.id)
-        const person = persons.find(n => n.id === id)
-        if(person) {
-            response.json(person)
-        }
-        else {
-            response.status(404).end()
-        }
+        Contact.findById(request.params.id)
+        .then (person =>{
+            if(person) {
+                response.json(person)
+            }
+            else {
+                response.status(404).end()
+            }
+        })
+        .catch (error => {
+            console.log(error);
+            response.status(400).send({error:'malformated: id'})
+        })
     })
     app.delete('/api/persons/:id',(request,response) => {
-        const id = Number(request.params.id)
-        //console.log('Delete id:',id);
-        persons=persons.filter(n => n.id !== id)
-        response.status(204).end()
+        Contact.findByIdAndDelete(request.params.id)
+        .then(() => {
+            response.status(204).end(); // Devuelve una respuesta sin contenido (No Content)
+        })
+        .catch(error => {
+            console.error(error);
+            response.status(400).send({ error: 'malformated: id' });
+        })
     })
- 
-    const generateId = () => {
-        const maxId = persons.length > 0
-            ? Math.max(...persons.map(n => n.id))
-            : 0
-        return maxId + 1
-    }
  
     app.post('/api/persons',(request,response) => { //agrega notas
         const body = request.body
         console.log(body)
         if (!body.name || !body.number) {
+            console.log("error post")
             return response.status(400).json({
-                error: 'name or number missing'
+                error: 'nombre o numero faltante'
             });
         }
-        const person = {
-            id: generateId(),
+        const person = new Contact ({
             name: body.name,
             number: body.number
-        };
-        persons = persons.concat(person)
-        response.json(person)
+        });
+        person.save().then(result => response.json(person))
     })
  
     app.put('/api/persons/:id', (request, response) => {
-        const id = Number(request.params.id);
-        const { name, number } = request.body;
+        const body = request.body;
     
         // Verificar que los campos 'name' y 'number' estén presentes en el cuerpo de la solicitud
-        if (!name || !number) {
+        if (!body.name || !body.number) {
+            console.log("Error put")
             return response.status(400).json({
                 error: 'Falta el nombre o numero'
             });
         }
-    
-        // Buscar la persona por ID
-        const personIndex = persons.findIndex(n => n.id === id);
-    
-        // Si no se encuentra la persona, retornar un error 404
-        if (personIndex === -1) {
-            return response.status(404).json({
-                error: 'Persona no encontrada en agenda'
-            });
-        }
-    
         // Crear un objeto con los datos actualizados
-        const updatedPerson = {
-            id: id,
-            name: name || persons[personIndex].name,  // Actualizar 'name'
-            number: number || persons[personIndex].number // Actualizar 'number'
-        };
-    
-        // Reemplazar la persona existente en la lista
-        persons[personIndex] = updatedPerson;
-    
-        // Enviar la respuesta con la persona actualizada
-        response.json(updatedPerson);
-    });
+        const person = {
+            name: body.name,
+            number: body.number 
+        }
+        Contact.findByIdAndUpdate(request.params.id,person,{new:true})
+            .then(result => {
+                response.json(result)
+            })
+    })
+
  
-    const PORT = process.env.PORT || 3001
+    const PORT = process.env.PORT
     app.listen(PORT, () => {
         //console.log(`Server express running on port ${PORT}`);
     })
